@@ -93,6 +93,10 @@ The automation baseline configures CloudTAK for offline tactical operations cent
 
 ```text
 tisck-ansible/
+├── .agents/
+│   └── skills/
+│       ├── ansible/SKILL.md             # Ansible expert automation & idempotency skill
+│       └── tisck-ansible-ops/SKILL.md   # TISCK platform operations & disaster recovery skill
 ├── ansible.cfg                          # Ansible global engine settings & pipelining
 ├── Makefile                             # Single-command operator workflows
 ├── README.md                            # Complete architecture & deployment guide
@@ -257,6 +261,19 @@ In field environments with zero internet access:
    - `bluenviron/mediamtx:1.11.3-ffmpeg`
 4. In `inventory/group_vars/all.yml`, set `cloudtak_build_images: false` and `tak_build_images: false` if images were pre-built.
 5. Execute `make deploy-local`.
+
+---
+
+## Agent AI Skills Integration
+
+The workspace includes embedded Antigravity AI Skills located under `.agents/skills/`:
+
+| Skill | Path | Description |
+| :--- | :--- | :--- |
+| **`ansible`** | [`.agents/skills/ansible/SKILL.md`](.agents/skills/ansible/SKILL.md) | Standardized Ansible expert automation guidelines: FQCN enforcement, idempotency checks (`changed_when`/`failed_when`), role structure, and dry-run syntax verification. |
+| **`tisck-ansible-ops`** | [`.agents/skills/tisck-ansible-ops/SKILL.md`](.agents/skills/tisck-ansible-ops/SKILL.md) | TISCK platform operational runbooks: Garage S3 bucket management, Authentik OIDC bootstrapping, MediaMTX validation, disaster recovery snapshots, and ATAK pairing. |
+
+Additionally, the `ansible` skill is installed globally in `~/.gemini/config/skills/ansible/` for cross-project accessibility.
 
 ---
 
