@@ -1,0 +1,5 @@
+---
+# defaults for roles/tak_server
+tak_db_container_name: "tak-infra-tak-db-1"
+tak_server_container_name: "tak-infra-tak-server-1"
+tak_build_images: true

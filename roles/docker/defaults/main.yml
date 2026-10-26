@@ -1,0 +1,5 @@
+---
+# defaults for roles/docker
+docker_log_max_size: "50m"
+docker_log_max_file: "5"
+docker_install_python_packages: true

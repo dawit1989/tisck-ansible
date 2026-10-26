@@ -1,0 +1,81 @@
+---
+# ==============================================================================
+# TISCK Automated Backup & Snapshot Playbook (playbooks/backup.yml)
+# ==============================================================================
+- name: Backup TISCK Databases, Configuration, and Encryption Keys
+  hosts: tisck
+  become: yes
+  gather_facts: yes
+
+  vars:
+    backup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    backup_staging_dir: "/tmp/tisck_backup_{{ backup_timestamp }}"
+
+  tasks:
+    - name: Ensure backup destinations exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ tisck_user }}"
+        group: "{{ tisck_group }}"
+        mode: '0700'
+      loop:
+        - "{{ tisck_backup_dir }}"
+        - "{{ backup_staging_dir }}"
+
+    - name: Dump CloudTAK PostGIS Database
+      ansible.builtin.shell: |
+        docker exec cloudtak-postgis-1 pg_dumpall -U {{ cloudtak_db_user }} > {{ backup_staging_dir }}/cloudtak_postgis.sql
+      failed_when: false
+
+    - name: Dump Authentik Identity Database
+      ansible.builtin.shell: |
+        docker exec auth-infra-auth-db-1 pg_dumpall -U {{ authentik_db_user }} > {{ backup_staging_dir }}/authentik_db.sql
+      failed_when: false
+
+    - name: Dump TAK Server Database
+      ansible.builtin.shell: |
+        docker exec tak-infra-tak-db-1 pg_dumpall -U {{ tak_db_user }} > {{ backup_staging_dir }}/tak_db.sql
+      failed_when: false
+
+    - name: Copy module configuration and secrets into backup staging
+      ansible.builtin.shell: |
+        mkdir -p {{ backup_staging_dir }}/configs
+        find {{ tisck_install_dir }} -type f \( -name "*.env" -o -name "*.env.identity" -o -name "garage.toml" \) -exec cp --parents {} {{ backup_staging_dir }}/configs/ \;
+      changed_when: true
+
+    - name: Backup TAK Server certificates and client credentials
+      ansible.builtin.shell: |
+        docker run --rm -v tak-infra_tak-certs:/source:ro -v {{ backup_staging_dir }}:/dest alpine tar czf /dest/tak_certs.tar.gz -C /source .
+      failed_when: false
+
+    - name: Compress full backup archive
+      ansible.builtin.archive:
+        path: "{{ backup_staging_dir }}/*"
+        dest: "{{ tisck_backup_dir }}/tisck_backup_{{ backup_timestamp }}.tar.gz"
+        format: gz
+        mode: '0600'
+        owner: "{{ tisck_user }}"
+        group: "{{ tisck_group }}"
+
+    - name: Remove temporary backup staging directory
+      ansible.builtin.file:
+        path: "{{ backup_staging_dir }}"
+        state: absent
+
+    - name: Prune old backup archives exceeding retention threshold
+      ansible.builtin.find:
+        paths: "{{ tisck_backup_dir }}"
+        patterns: "tisck_backup_*.tar.gz"
+        age: "{{ backup_retention_days }}d"
+      register: old_backups
+
+    - name: Delete pruned backup archives
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+
+    - name: Backup summary notification
+      ansible.builtin.debug:
+        msg: "✅ Backup completed successfully: {{ tisck_backup_dir }}/tisck_backup_{{ backup_timestamp }}.tar.gz"

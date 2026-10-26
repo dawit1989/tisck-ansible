@@ -1,0 +1,49 @@
+---
+# tasks for roles/basemaps
+
+- name: Ensure basemaps storage directory exists
+  ansible.builtin.file:
+    path: "{{ basemaps_source_dir }}"
+    state: directory
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0755'
+
+- name: Copy offline PMTiles basemap files to server if specified
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ basemaps_source_dir }}/"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0644'
+  loop: "{{ basemaps_files }}"
+  when:
+    - basemaps_upload_enabled | bool
+    - basemaps_files | length > 0
+
+- name: Check if python3-boto3 or minio client is available for S3 upload
+  when: basemaps_upload_enabled | bool
+  block:
+    - name: Upload PMTiles into Garage basemaps bucket
+      ansible.builtin.shell: |
+        python3 - << 'EOF'
+        import os, sys, boto3
+        s3 = boto3.client(
+            's3',
+            endpoint_url='http://127.0.0.1:{{ garage_s3_port }}',
+            aws_access_key_id='{{ garage_access_key_id }}',
+            aws_secret_access_key='{{ garage_secret_access_key }}',
+            region_name='{{ garage_region }}'
+        )
+        source_dir = '{{ basemaps_source_dir }}'
+        bucket = '{{ basemaps_target_bucket }}'
+        for root, _, files in os.walk(source_dir):
+            for file in files:
+                if file.endswith('.pmtiles'):
+                    local_path = os.path.join(root, file)
+                    print(f"Uploading {file} to s3://{bucket}/{file}...")
+                    s3.upload_file(local_path, bucket, file)
+        print("Upload complete.")
+        EOF
+      changed_when: true
+      failed_when: false

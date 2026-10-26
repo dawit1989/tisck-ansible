@@ -1,0 +1,8 @@
+*.retry
+.ansible/
+*.log
+*.tar.gz
+*.sql
+.vault_pass
+.DS_Store
+Thumbs.db

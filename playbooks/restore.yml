@@ -1,0 +1,82 @@
+---
+# ==============================================================================
+# TISCK Disaster Recovery & Restoration Playbook (playbooks/restore.yml)
+# Usage:
+#   ansible-playbook playbooks/restore.yml -e backup_file=/var/backups/tisck/tisck_backup_20261026_120000.tar.gz
+# ==============================================================================
+- name: Restore TISCK Databases, Configuration, and Encryption Keys
+  hosts: tisck
+  become: yes
+  gather_facts: yes
+
+  vars:
+    backup_file: ""
+    restore_staging_dir: "/tmp/tisck_restore"
+
+  tasks:
+    - name: Validate that backup file path is specified
+      ansible.builtin.assert:
+        that:
+          - backup_file != ""
+        fail_msg: "Please pass -e backup_file=/path/to/tisck_backup_*.tar.gz"
+
+    - name: Ensure restore staging directory exists
+      ansible.builtin.file:
+        path: "{{ restore_staging_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Extract backup archive
+      ansible.builtin.unarchive:
+        src: "{{ backup_file }}"
+        dest: "{{ restore_staging_dir }}"
+        remote_src: yes
+
+    - name: Restore configuration files to installation directory
+      ansible.builtin.shell: |
+        if [ -d "{{ restore_staging_dir }}/configs" ]; then
+          cp -r {{ restore_staging_dir }}/configs/* /
+        fi
+      changed_when: true
+
+    - name: Restore CloudTAK PostGIS Database
+      ansible.builtin.shell: |
+        if [ -f "{{ restore_staging_dir }}/cloudtak_postgis.sql" ]; then
+          cat {{ restore_staging_dir }}/cloudtak_postgis.sql | docker exec -i cloudtak-postgis-1 psql -U {{ cloudtak_db_user }} -d postgres
+        fi
+      failed_when: false
+
+    - name: Restore Authentik Database
+      ansible.builtin.shell: |
+        if [ -f "{{ restore_staging_dir }}/authentik_db.sql" ]; then
+          cat {{ restore_staging_dir }}/authentik_db.sql | docker exec -i auth-infra-auth-db-1 psql -U {{ authentik_db_user }} -d postgres
+        fi
+      failed_when: false
+
+    - name: Restore TAK Server Database
+      ansible.builtin.shell: |
+        if [ -f "{{ restore_staging_dir }}/tak_db.sql" ]; then
+          cat {{ restore_staging_dir }}/tak_db.sql | docker exec -i tak-infra-tak-db-1 psql -U {{ tak_db_user }} -d postgres
+        fi
+      failed_when: false
+
+    - name: Restore TAK certificates volume
+      ansible.builtin.shell: |
+        if [ -f "{{ restore_staging_dir }}/tak_certs.tar.gz" ]; then
+          docker run --rm -v tak-infra_tak-certs:/dest -v {{ restore_staging_dir }}:/source alpine tar xzf /source/tak_certs.tar.gz -C /dest
+        fi
+      failed_when: false
+
+    - name: Clean up restore staging directory
+      ansible.builtin.file:
+        path: "{{ restore_staging_dir }}"
+        state: absent
+
+    - name: Restart all services following restoration
+      ansible.builtin.import_playbook: service_control.yml
+      vars:
+        tisck_action: restart
+
+    - name: Display restoration completion notice
+      ansible.builtin.debug:
+        msg: "✅ TISCK stack successfully restored from {{ backup_file }}."

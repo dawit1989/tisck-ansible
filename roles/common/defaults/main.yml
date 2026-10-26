@@ -1,0 +1,22 @@
+---
+# defaults for roles/common
+common_packages:
+  - curl
+  - git
+  - python3
+  - python3-pip
+  - python3-setuptools
+  - tar
+  - unzip
+  - jq
+  - openssl
+  - ca-certificates
+  - rsync
+  - iptables
+  - ufw
+
+common_manage_firewall: true
+common_sysctl_settings:
+  vm.max_map_count: 262144
+  net.ipv4.ip_forward: 1
+  fs.file-max: 2097152

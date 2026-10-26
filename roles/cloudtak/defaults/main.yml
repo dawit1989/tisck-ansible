@@ -1,0 +1,6 @@
+---
+# defaults for roles/cloudtak
+cloudtak_postgis_container_name: "cloudtak-postgis-1"
+cloudtak_api_container_name: "cloudtak-api-1"
+cloudtak_tiles_container_name: "cloudtak-tiles-1"
+cloudtak_build_images: true

@@ -1,0 +1,6 @@
+---
+# defaults for roles/basemaps
+basemaps_source_dir: "{{ tisck_data_dir }}/basemaps"
+basemaps_target_bucket: "tisck-basemaps"
+basemaps_upload_enabled: false
+basemaps_files: []

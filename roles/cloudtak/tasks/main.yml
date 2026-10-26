@@ -1,0 +1,39 @@
+---
+# tasks for roles/cloudtak
+
+- name: Deploy cloudtak .env file
+  ansible.builtin.template:
+    src: cloudtak.env.j2
+    dest: "{{ tisck_install_dir }}/cloudtak/.env"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Start CloudTAK situational awareness stack (build if required)
+  ansible.builtin.command:
+    cmd: >
+      docker compose -f docker-compose.yml up -d {{ '--build' if cloudtak_build_images | bool else '' }}
+    chdir: "{{ tisck_install_dir }}/cloudtak"
+  register: cloudtak_compose_up
+  changed_when: "'Started' in cloudtak_compose_up.stdout or 'Created' in cloudtak_compose_up.stdout or 'Built' in cloudtak_compose_up.stdout"
+
+- name: Wait for PostGIS container to be healthy
+  ansible.builtin.command:
+    cmd: "docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ cloudtak_postgis_container_name }}"
+  register: postgis_health
+  until: postgis_health.stdout == 'healthy'
+  retries: 25
+  delay: 4
+  changed_when: false
+
+- name: Wait for CloudTAK API service to respond (Port 5000)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cloudtak_api_port }}"
+    timeout: 120
+
+- name: Wait for PMTiles tile server to respond (Port 5002)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cloudtak_tiles_port }}"
+    timeout: 60

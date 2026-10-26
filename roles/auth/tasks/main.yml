@@ -1,0 +1,77 @@
+---
+# tasks for roles/auth
+
+- name: Deploy auth-infra .env file
+  ansible.builtin.template:
+    src: auth.env.j2
+    dest: "{{ tisck_install_dir }}/auth-infra/.env"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Deploy auth-infra .env.identity file
+  ansible.builtin.template:
+    src: auth.env.identity.j2
+    dest: "{{ tisck_install_dir }}/auth-infra/.env.identity"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Copy .env.identity to cloudtak directory for OIDC linking
+  ansible.builtin.template:
+    src: auth.env.identity.j2
+    dest: "{{ tisck_install_dir }}/cloudtak/.env.identity"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Start Authentik identity stack (without LDAP)
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml up -d
+    chdir: "{{ tisck_install_dir }}/auth-infra"
+  when: not (tisck_enable_ldap | bool)
+  register: auth_compose_up
+  changed_when: "'Started' in auth_compose_up.stdout or 'Created' in auth_compose_up.stdout"
+
+- name: Start Authentik identity stack (with LDAP Outpost profile)
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml --profile ldap up -d
+    chdir: "{{ tisck_install_dir }}/auth-infra"
+  when: tisck_enable_ldap | bool
+  register: auth_ldap_compose_up
+  changed_when: "'Started' in auth_ldap_compose_up.stdout or 'Created' in auth_ldap_compose_up.stdout"
+
+- name: Wait for Authentik server container to become healthy
+  ansible.builtin.command:
+    cmd: "docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ authentik_server_container_name }}"
+  register: auth_server_health
+  until: auth_server_health.stdout == 'healthy'
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Wait for Authentik HTTP API readiness
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ authentik_http_port }}/api/v3/core/applications/"
+    headers:
+      Authorization: "Bearer {{ authentik_bootstrap_token }}"
+    status_code: [200, 401, 403]
+  register: auth_api_probe
+  until: auth_api_probe.status == 200
+  retries: 20
+  delay: 5
+
+- name: Execute Authentik bootstrap script (Tactical Groups & OIDC Provider)
+  ansible.builtin.command:
+    cmd: >
+      bash {{ tisck_install_dir }}/auth-infra/scripts/bootstrap-authentik.sh
+      {{ authentik_bootstrap_token }}
+      {{ oidc_client_secret }}
+  environment:
+    AUTHENTIK_URL: "http://127.0.0.1:{{ authentik_http_port }}"
+    AUTHENTIK_BOOTSTRAP_TOKEN: "{{ authentik_bootstrap_token }}"
+    OIDC_CLIENT_ID: "{{ oidc_client_id }}"
+    OIDC_CLIENT_SECRET: "{{ oidc_client_secret }}"
+    OIDC_REDIRECT_URI: "http://{{ tisck_public_host_or_ip }}:{{ cloudtak_api_port }}/api/login/oidc/callback"
+  register: auth_bootstrap_result
+  changed_when: "'Creating' in auth_bootstrap_result.stdout"

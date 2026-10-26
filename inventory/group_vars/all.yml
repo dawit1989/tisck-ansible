@@ -1,0 +1,169 @@
+---
+# ==============================================================================
+# TISCK Global Configuration Variables (inventory/group_vars/all.yml)
+# Tactical Intelligence and Secure Communication Kit
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Base Deployment & Repository Settings
+# ------------------------------------------------------------------------------
+tisck_repo_url: "https://github.com/dawit1989/TISCK.git"
+tisck_repo_version: "main"
+tisck_install_dir: "/opt/tisck"
+tisck_data_dir: "/var/lib/tisck"
+tisck_backup_dir: "/var/backups/tisck"
+
+# System user & group to own TISCK files
+tisck_user: "tisck"
+tisck_group: "tisck"
+
+# Target deployment Host IP / Domain (used by tactical clients & Web UI)
+# Set this to the external IP or FQDN of the tactical server node
+tisck_public_host_or_ip: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+
+# Docker Shared Backbone Network
+tisck_docker_network: "tisck-net"
+tisck_docker_network_subnet: "172.28.0.0/16"
+tisck_docker_network_gateway: "172.28.0.1"
+
+# Module Enable Toggles (Deploy full stack or selective modules)
+tisck_enable_garage: true
+tisck_enable_auth: true
+tisck_enable_media: true
+tisck_enable_cloudtak: true
+tisck_enable_tak_server: true
+tisck_enable_ldap: true       # Optional Authentik LDAP outpost for TAK Server
+
+# ------------------------------------------------------------------------------
+# 2. Garage S3 Object Storage Settings (garage-infra)
+# ------------------------------------------------------------------------------
+garage_s3_port: 3900
+garage_web_port: 3902
+garage_admin_port: 3903
+
+garage_region: "garage"
+garage_key_name: "cloudtak-key"
+garage_access_key_id: "GK9271da3b9f4bab9872cc88da"
+garage_secret_access_key: "ee6b428c2ee78c6af64ed8e1a43aa2ca8e14ddcccac5800f45c17b7d72bc83a5"
+garage_rpc_secret: "b4c73f91d8a2054e76f1839210c4a89eb4c73f91d8a2054e76f1839210c4a89e"
+garage_admin_token: "e819ac29d4b8e21a50c82f91b7d3410fe819ac29d4b8e21a50c82f91b7d3410f"
+
+garage_buckets:
+  - "cloudtak"
+  - "tisck-basemaps"
+  - "tak-server"
+  - "tisck-assets"
+
+# ------------------------------------------------------------------------------
+# 3. Authentik Identity Provider Settings (auth-infra)
+# ------------------------------------------------------------------------------
+authentik_http_port: 9000
+authentik_https_port: 9443
+authentik_ldap_port: 389
+authentik_ldaps_port: 636
+
+# Authentik Core Secrets
+authentik_secret_key: "tisck-auth-secret-key-replace-with-a-50-character-minimum-random-string"
+authentik_bootstrap_password: "AdminTacticalPassword123!"
+authentik_bootstrap_token: "tisck-bootstrap-api-token-48-chars-random-string-auth"
+
+# Authentik Dedicated PostgreSQL DB
+authentik_db_name: "authentik"
+authentik_db_user: "authentik"
+authentik_db_password: "authentik-db-secure-pass"
+
+# Authentik OIDC Application Client
+oidc_client_id: "cloudtak"
+oidc_client_secret: "tisck-oidc-client-secret-secure-token"
+oidc_scopes: "openid profile email groups"
+
+# Tactical Operational Groups seeded into Authentik
+tisck_tactical_groups:
+  - name: "TISCK_INTEL"
+    description: "Tactical Intelligence & Reconnaissance Operators"
+  - name: "TISCK_RECON"
+    description: "Forward Reconnaissance Team"
+  - name: "TISCK_COMMAND"
+    description: "Command and Staff Operators"
+  - name: "TISCK_ISR"
+    description: "Intelligence, Surveillance, and Reconnaissance Feed Analysts"
+  - name: "CloudTAKSystemAdmin"
+    description: "CloudTAK Administrative Staff"
+  - name: "CloudTAKAgency1"
+    description: "Primary Agency Operational Staff"
+
+# ------------------------------------------------------------------------------
+# 4. Media Streaming Settings (media-infra / MediaMTX)
+# ------------------------------------------------------------------------------
+media_port_rtsp: 8554
+media_port_webrtc: 8889
+media_port_rtmp: 1935
+media_port_hls: 8888
+media_port_srt: 8890
+media_port_api: 9997
+
+# ------------------------------------------------------------------------------
+# 5. CloudTAK Core Situational Awareness Settings (cloudtak)
+# ------------------------------------------------------------------------------
+cloudtak_api_port: 5000
+cloudtak_tiles_port: 5002
+cloudtak_postgres_port: 5432
+
+cloudtak_signing_secret: "tisck-jwt-signing-secret-secure-random-32-chars-min"
+
+# CloudTAK Dedicated PostgreSQL / PostGIS DB
+cloudtak_db_name: "gis"
+cloudtak_db_user: "docker"
+cloudtak_db_password: "gis-docker-secure-pass"
+
+# Horn of Africa Geospatial Baseline
+cloudtak_map_center: "38.7578,9.0222"   # Addis Ababa, Ethiopia
+cloudtak_map_zoom: 6
+cloudtak_map_pitch: 0
+cloudtak_map_bearing: 0
+cloudtak_display_distance: "kilometer"
+cloudtak_display_elevation: "meter"
+cloudtak_display_speed: "km/h"
+cloudtak_display_projection: "mercator"
+
+# Tactical Group Callout & Color Definitions
+cloudtak_group_mappings:
+  Blue: "Joint Operations Command"
+  Red: "Tactical Response Unit"
+  Yellow: "Medical & CASEVAC"
+  White: "Emergency Relief"
+  Purple: "Command & Staff"
+  Brown: "Ground Defense"
+  Maroon: "Field Hospital"
+  Orange: "Search & Rescue (SAR)"
+  Teal: "Maritime & Riverine"
+  Green: "Border Security"
+  Cyan: "Communications & Logistics"
+  Dark_Blue: "Intelligence & Recon"
+  Custom1: "Aviation & UAS"
+
+# ------------------------------------------------------------------------------
+# 6. Official TAK Server Settings (tak-infra)
+# ------------------------------------------------------------------------------
+tak_cot_port: 8089
+tak_web_port: 8443
+tak_cert_port: 8446
+tak_version: "takserver-docker-5.7-RELEASE-43"
+tak_organization: "TISCK"
+tak_organizational_unit: "Tactical Operations"
+tak_country: "ET"
+tak_state: "Addis Ababa"
+tak_city: "Addis Ababa"
+tak_ca_password: "atakataksecurepass"
+tak_cert_password: "atakataksecurepass"
+
+tak_db_name: "takserver"
+tak_db_user: "tak"
+tak_db_password: "tak-db-secure-pass"
+
+# ------------------------------------------------------------------------------
+# 7. Backup & Maintenance
+# ------------------------------------------------------------------------------
+backup_retention_days: 14
+backup_cron_hour: 3
+backup_cron_minute: 0

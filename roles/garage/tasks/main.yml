@@ -1,0 +1,92 @@
+---
+# tasks for roles/garage
+
+- name: Deploy garage.toml configuration
+  ansible.builtin.template:
+    src: garage.toml.j2
+    dest: "{{ tisck_install_dir }}/garage-infra/garage.toml"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0640'
+
+- name: Deploy garage-infra .env file
+  ansible.builtin.template:
+    src: garage.env.j2
+    dest: "{{ tisck_install_dir }}/garage-infra/.env"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Start Garage S3 container stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml up -d
+    chdir: "{{ tisck_install_dir }}/garage-infra"
+  register: garage_compose_up
+  changed_when: "'Started' in garage_compose_up.stdout or 'Created' in garage_compose_up.stdout"
+
+- name: Wait for Garage container to be healthy
+  ansible.builtin.command:
+    cmd: "docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ garage_container_name }}"
+  register: garage_health
+  until: garage_health.stdout == 'healthy'
+  retries: 20
+  delay: 3
+  changed_when: false
+
+- name: Inspect current Garage cluster layout
+  ansible.builtin.command:
+    cmd: "docker exec {{ garage_container_name }} /garage layout show"
+  register: garage_layout_status
+  failed_when: false
+  changed_when: false
+
+- name: Initialize single-node Garage layout if not configured
+  when: "'NO ROLE ASSIGNED' in garage_layout_status.stdout or 'No layout configuration' in garage_layout_status.stdout or 'No nodes currently have a role' in garage_layout_status.stdout"
+  block:
+    - name: Fetch local Garage Node ID
+      ansible.builtin.shell:
+        cmd: "docker exec {{ garage_container_name }} /garage status | awk '/^[0-9a-fA-F]{16,64}/ {print $1}' | head -n 1"
+      register: garage_node_id
+      changed_when: false
+
+    - name: Assign node to local zone with configured capacity
+      ansible.builtin.command:
+        cmd: "docker exec {{ garage_container_name }} /garage layout assign -z {{ garage_layout_zone }} -c {{ garage_layout_capacity }} {{ garage_node_id.stdout }}"
+      when: garage_node_id.stdout != ""
+
+    - name: Apply Garage layout version 1
+      ansible.builtin.command:
+        cmd: "docker exec {{ garage_container_name }} /garage layout apply --version 1"
+      when: garage_node_id.stdout != ""
+
+- name: List existing Garage S3 access keys
+  ansible.builtin.command:
+    cmd: "docker exec {{ garage_container_name }} /garage key list"
+  register: garage_keys_list
+  changed_when: false
+
+- name: Create S3 key if absent
+  ansible.builtin.command:
+    cmd: "docker exec {{ garage_container_name }} /garage key create {{ garage_key_name }}"
+  when: "garage_key_name not in garage_keys_list.stdout"
+  register: garage_key_created
+
+- name: Extract S3 access key credentials if newly created
+  when: garage_key_created is changed
+  ansible.builtin.shell:
+    cmd: "docker exec {{ garage_container_name }} /garage key info {{ garage_key_name }}"
+  register: garage_key_info
+  changed_when: false
+
+- name: List existing Garage buckets
+  ansible.builtin.command:
+    cmd: "docker exec {{ garage_container_name }} /garage bucket list"
+  register: garage_bucket_list
+  changed_when: false
+
+- name: Provision required TISCK buckets and grant read/write permissions
+  ansible.builtin.shell: |
+    docker exec {{ garage_container_name }} /garage bucket create {{ item }} || true
+    docker exec {{ garage_container_name }} /garage bucket allow {{ item }} --key {{ garage_key_name }} --read --write
+  loop: "{{ garage_buckets }}"
+  when: "item not in garage_bucket_list.stdout"

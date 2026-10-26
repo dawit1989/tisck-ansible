@@ -1,0 +1,38 @@
+---
+# ==============================================================================
+# TISCK Modular Deployment Playbook (playbooks/deploy.yml)
+# Use tags to target individual subsystems:
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy.yml --tags garage
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy.yml --tags auth
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy.yml --tags media
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy.yml --tags cloudtak
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy.yml --tags tak_server
+# ==============================================================================
+- name: Modular Deploy TISCK Components
+  hosts: tisck
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: tisck_network
+      tags: [always, network]
+
+    - role: garage
+      when: tisck_enable_garage | bool
+      tags: [garage, storage]
+
+    - role: auth
+      when: tisck_enable_auth | bool
+      tags: [auth, identity]
+
+    - role: media
+      when: tisck_enable_media | bool
+      tags: [media, streaming]
+
+    - role: cloudtak
+      when: tisck_enable_cloudtak | bool
+      tags: [cloudtak, core]
+
+    - role: tak_server
+      when: tisck_enable_tak_server | bool
+      tags: [tak_server, tak]

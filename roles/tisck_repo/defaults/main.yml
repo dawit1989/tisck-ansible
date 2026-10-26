@@ -1,0 +1,6 @@
+---
+# defaults for roles/tisck_repo
+tisck_repo_depth: 1
+tisck_repo_force_update: false
+tisck_use_local_src: false
+tisck_local_src_path: ""

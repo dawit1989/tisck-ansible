@@ -1,0 +1,45 @@
+---
+# tasks for roles/tak_server
+
+- name: Deploy tak-infra .env file
+  ansible.builtin.template:
+    src: tak.env.j2
+    dest: "{{ tisck_install_dir }}/tak-infra/.env"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Start TAK Server stack (build container if required)
+  ansible.builtin.command:
+    cmd: >
+      docker compose -f docker-compose.yml up -d {{ '--build' if tak_build_images | bool else '' }}
+    chdir: "{{ tisck_install_dir }}/tak-infra"
+  register: tak_compose_up
+  changed_when: "'Started' in tak_compose_up.stdout or 'Created' in tak_compose_up.stdout or 'Built' in tak_compose_up.stdout"
+
+- name: Wait for TAK database container to become healthy
+  ansible.builtin.command:
+    cmd: "docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ tak_db_container_name }}"
+  register: tak_db_health
+  until: tak_db_health.stdout == 'healthy'
+  retries: 25
+  delay: 4
+  changed_when: false
+
+- name: Wait for TAK Server CoT port (8089)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ tak_cot_port }}"
+    timeout: 180
+
+- name: Wait for TAK Server Web Administration port (8443)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ tak_web_port }}"
+    timeout: 60
+
+- name: Wait for TAK Server Cert Enrollment port (8446)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ tak_cert_port }}"
+    timeout: 60

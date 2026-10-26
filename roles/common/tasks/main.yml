@@ -1,0 +1,124 @@
+---
+# tasks for roles/common
+- name: Update apt cache and install base dependencies (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: Install base dependencies (RedHat/Rocky Linux)
+  ansible.builtin.dnf:
+    name:
+      - curl
+      - git
+      - python3
+      - python3-pip
+      - tar
+      - unzip
+      - jq
+      - openssl
+      - ca-certificates
+      - rsync
+      - iptables
+    state: present
+    update_cache: yes
+  when: ansible_os_family == 'RedHat'
+
+- name: Create tisck system group
+  ansible.builtin.group:
+    name: "{{ tisck_group }}"
+    state: present
+    system: yes
+
+- name: Create tisck system user
+  ansible.builtin.user:
+    name: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    state: present
+    system: yes
+    shell: /bin/bash
+    create_home: yes
+
+- name: Configure kernel sysctl parameters for high-throughput tactical operations
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+    sysctl_set: yes
+  loop: "{{ common_sysctl_settings | dict2items }}"
+
+- name: Configure system ulimits for tactical services
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-tisck.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      * soft nofile 65536
+      * hard nofile 65536
+      * soft nproc 32768
+      * hard nproc 32768
+      root soft nofile 65536
+      root hard nofile 65536
+
+- name: Configure UFW firewall rules for TISCK edge ports (Debian/Ubuntu)
+  when:
+    - common_manage_firewall | bool
+    - ansible_os_family == 'Debian'
+  block:
+    - name: Ensure SSH is allowed
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow CloudTAK Web COP & REST API (0.0.0.0:5000)
+      community.general.ufw:
+        rule: allow
+        port: "{{ cloudtak_api_port }}"
+        proto: tcp
+
+    - name: Allow PMTiles Map Tile Server (0.0.0.0:5002)
+      community.general.ufw:
+        rule: allow
+        port: "{{ cloudtak_tiles_port }}"
+        proto: tcp
+
+    - name: Allow Media Streaming RTSP (0.0.0.0:8554)
+      community.general.ufw:
+        rule: allow
+        port: "{{ media_port_rtsp }}"
+        proto: tcp
+
+    - name: Allow Media Streaming WebRTC (0.0.0.0:8889)
+      community.general.ufw:
+        rule: allow
+        port: "{{ media_port_webrtc }}"
+        proto: tcp
+
+    - name: Allow Media Streaming RTMP (0.0.0.0:1935)
+      community.general.ufw:
+        rule: allow
+        port: "{{ media_port_rtmp }}"
+        proto: tcp
+
+    - name: Allow TAK Server CoT TLS (0.0.0.0:8089)
+      community.general.ufw:
+        rule: allow
+        port: "{{ tak_cot_port }}"
+        proto: tcp
+
+    - name: Allow TAK Server Web Administration (0.0.0.0:8443)
+      community.general.ufw:
+        rule: allow
+        port: "{{ tak_web_port }}"
+        proto: tcp
+
+    - name: Allow TAK Server Cert Auto-Enrollment (0.0.0.0:8446)
+      community.general.ufw:
+        rule: allow
+        port: "{{ tak_cert_port }}"
+        proto: tcp

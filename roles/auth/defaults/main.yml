@@ -1,0 +1,4 @@
+---
+# defaults for roles/auth
+authentik_server_container_name: "auth-infra-authentik-server-1"
+authentik_log_level: "info"

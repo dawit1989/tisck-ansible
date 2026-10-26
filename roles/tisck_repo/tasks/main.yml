@@ -1,0 +1,42 @@
+---
+# tasks for roles/tisck_repo
+
+- name: Create TISCK installation and persistent data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0755'
+  loop:
+    - "{{ tisck_install_dir }}"
+    - "{{ tisck_data_dir }}"
+    - "{{ tisck_backup_dir }}"
+    - "{{ tisck_data_dir }}/basemaps"
+    - "{{ tisck_data_dir }}/certs"
+
+- name: Sync repository from Git (Online / Connected environment)
+  ansible.builtin.git:
+    repo: "{{ tisck_repo_url }}"
+    dest: "{{ tisck_install_dir }}"
+    version: "{{ tisck_repo_version }}"
+    depth: "{{ tisck_repo_depth }}"
+    force: "{{ tisck_repo_force_update | bool }}"
+  when: not (tisck_use_local_src | bool)
+  become_user: "{{ tisck_user }}"
+
+- name: Copy local source archive to target (Air-gapped / Offline environment)
+  ansible.builtin.unarchive:
+    src: "{{ tisck_local_src_path }}"
+    dest: "{{ tisck_install_dir }}"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0755'
+  when:
+    - tisck_use_local_src | bool
+    - tisck_local_src_path != ""
+
+- name: Make all bash scripts executable across all modules
+  ansible.builtin.shell: |
+    find {{ tisck_install_dir }} -type f -name "*.sh" -exec chmod +x {} +
+  changed_when: false

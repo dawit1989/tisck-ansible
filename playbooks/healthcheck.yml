@@ -1,0 +1,116 @@
+---
+# ==============================================================================
+# TISCK System Healthcheck and Compliance Audit Playbook
+# (playbooks/healthcheck.yml)
+# ==============================================================================
+- name: Audit TISCK Stack Health and Port Security
+  hosts: tisck
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: 1. Verify Docker Engine status
+      ansible.builtin.command: docker info --format '{{ '{{' }}.ServerVersion{{ '}}' }}'
+      register: docker_version
+      changed_when: false
+
+    - name: 2. Inspect Shared Backbone Network (tisck-net)
+      ansible.builtin.command: docker network inspect {{ tisck_docker_network }} --format '{{ '{{' }}.Driver{{ '}}' }}'
+      register: tisck_network_check
+      changed_when: false
+
+    - name: 3. Query all running TISCK containers
+      ansible.builtin.shell: |
+        docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}"
+      register: tisck_containers_table
+      changed_when: false
+
+    - name: 4. Verify Garage S3 Object Store
+      when: tisck_enable_garage | bool
+      block:
+        - name: Check Garage daemon status
+          ansible.builtin.command: docker exec garage-infra-garage-1 /garage status
+          register: garage_cli_status
+          changed_when: false
+          failed_when: false
+
+        - name: Check Garage bucket list
+          ansible.builtin.command: docker exec garage-infra-garage-1 /garage bucket list
+          register: garage_cli_buckets
+          changed_when: false
+          failed_when: false
+
+    - name: 5. Verify Authentik OIDC Identity Provider
+      when: tisck_enable_auth | bool
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ authentik_http_port }}/application/o/cloudtak/.well-known/openid-configuration"
+        status_code: 200
+      register: authentik_oidc_check
+      failed_when: false
+
+    - name: 6. Verify CloudTAK Situational Awareness API & Tile Server
+      when: tisck_enable_cloudtak | bool
+      block:
+        - name: Probe CloudTAK API (Port 5000)
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cloudtak_api_port }}/api/health"
+            status_code: [200, 404]
+          register: cloudtak_api_check
+          failed_when: false
+
+        - name: Probe PMTiles Server (Port 5002)
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ cloudtak_tiles_port }}"
+            timeout: 5
+          register: tiles_port_check
+          failed_when: false
+
+    - name: 7. Verify TAK Server Core
+      when: tisck_enable_tak_server | bool
+      block:
+        - name: Probe TAK Server CoT TLS (Port 8089)
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ tak_cot_port }}"
+            timeout: 5
+          register: tak_cot_check
+          failed_when: false
+
+        - name: Probe TAK Server Web Administration (Port 8443)
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ tak_web_port }}"
+            timeout: 5
+          register: tak_web_check
+          failed_when: false
+
+    - name: 8. Verify Media Streaming Server
+      when: tisck_enable_media | bool
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ media_port_rtsp }}"
+        timeout: 5
+      register: media_rtsp_check
+      failed_when: false
+
+    - name: Generate Audit Summary Report
+      ansible.builtin.debug:
+        msg:
+          - "================================================================="
+          - "🏥 TISCK HEALTHCHECK & AUDIT REPORT                              "
+          - "================================================================="
+          - "Docker Engine:            Version {{ docker_version.stdout | default('Unknown') }}"
+          - "Backbone Network:         {{ tisck_docker_network }} ({{ tisck_network_check.stdout | default('Not Found') }})"
+          - "-----------------------------------------------------------------"
+          - "Garage S3 Object Store:   {{ 'ONLINE' if garage_cli_status.rc == 0 else 'UNAVAILABLE' }}"
+          - "Authentik OIDC Discovery: {{ 'VALID (HTTP 200)' if (authentik_oidc_check.status | default(0)) == 200 else 'NOT READY / OFFLINE' }}"
+          - "CloudTAK Web API:         {{ 'ONLINE' if not (cloudtak_api_check.failed | default(true)) else 'OFFLINE' }}"
+          - "PMTiles Map Server:       {{ 'LISTENING' if not (tiles_port_check.failed | default(true)) else 'OFFLINE' }}"
+          - "TAK Server CoT (8089):    {{ 'LISTENING' if not (tak_cot_check.failed | default(true)) else 'OFFLINE' }}"
+          - "TAK Web Console (8443):   {{ 'LISTENING' if not (tak_web_check.failed | default(true)) else 'OFFLINE' }}"
+          - "Media RTSP Stream (8554): {{ 'LISTENING' if not (media_rtsp_check.failed | default(true)) else 'OFFLINE' }}"
+          - "================================================================="
+          - "CONTAINER INVENTORY:"
+          - "{{ tisck_containers_table.stdout_lines }}"
+          - "================================================================="

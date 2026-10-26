@@ -1,0 +1,61 @@
+---
+# ==============================================================================
+# TISCK Unified Service Lifecycle Controller (playbooks/service_control.yml)
+# Usage:
+#   ansible-playbook playbooks/service_control.yml -e tisck_action=start
+#   ansible-playbook playbooks/service_control.yml -e tisck_action=stop
+#   ansible-playbook playbooks/service_control.yml -e tisck_action=restart
+#   ansible-playbook playbooks/service_control.yml -e tisck_action=status
+# ==============================================================================
+- name: Control TISCK Platform Services
+  hosts: tisck
+  become: yes
+  gather_facts: no
+
+  vars:
+    tisck_action: "status" # start, stop, restart, status
+    compose_dirs_forward:
+      - "{{ tisck_install_dir }}/garage-infra"
+      - "{{ tisck_install_dir }}/auth-infra"
+      - "{{ tisck_install_dir }}/media-infra"
+      - "{{ tisck_install_dir }}/cloudtak"
+      - "{{ tisck_install_dir }}/tak-infra"
+    compose_dirs_reverse:
+      - "{{ tisck_install_dir }}/tak-infra"
+      - "{{ tisck_install_dir }}/cloudtak"
+      - "{{ tisck_install_dir }}/media-infra"
+      - "{{ tisck_install_dir }}/auth-infra"
+      - "{{ tisck_install_dir }}/garage-infra"
+
+  tasks:
+    - name: Validate requested action
+      ansible.builtin.assert:
+        that: tisck_action in ['start', 'stop', 'restart', 'status']
+        fail_msg: "Invalid tisck_action! Must be one of: start, stop, restart, status"
+
+    - name: Stop TISCK services (Reverse Dependency Order)
+      when: tisck_action in ['stop', 'restart']
+      ansible.builtin.command:
+        cmd: docker compose down
+        chdir: "{{ item }}"
+      loop: "{{ compose_dirs_reverse }}"
+      failed_when: false
+
+    - name: Start TISCK services (Forward Dependency Order)
+      when: tisck_action in ['start', 'restart']
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ item }}"
+      loop: "{{ compose_dirs_forward }}"
+
+    - name: Query current container status
+      when: tisck_action == 'status'
+      ansible.builtin.shell: |
+        docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}"
+      register: service_status
+      changed_when: false
+
+    - name: Display status output
+      when: tisck_action == 'status'
+      ansible.builtin.debug:
+        var: service_status.stdout_lines

@@ -1,0 +1,23 @@
+---
+# tasks for roles/media
+
+- name: Deploy media-infra .env file
+  ansible.builtin.template:
+    src: media.env.j2
+    dest: "{{ tisck_install_dir }}/media-infra/.env"
+    owner: "{{ tisck_user }}"
+    group: "{{ tisck_group }}"
+    mode: '0600'
+
+- name: Start MediaMTX streaming container
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml up -d
+    chdir: "{{ tisck_install_dir }}/media-infra"
+  register: media_compose_up
+  changed_when: "'Started' in media_compose_up.stdout or 'Created' in media_compose_up.stdout"
+
+- name: Verify MediaMTX streaming ports are listening
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ media_port_api }}"
+    timeout: 30

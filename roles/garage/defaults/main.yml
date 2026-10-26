@@ -1,0 +1,5 @@
+---
+# defaults for roles/garage
+garage_container_name: "garage-infra-garage-1"
+garage_layout_capacity: "100G"
+garage_layout_zone: "local"

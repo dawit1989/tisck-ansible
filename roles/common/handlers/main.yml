@@ -1,0 +1,7 @@
+---
+- name: Apply sysctl
+  ansible.builtin.command: sysctl --system
+
+- name: Reload ufw
+  community.general.ufw:
+    state: reloaded

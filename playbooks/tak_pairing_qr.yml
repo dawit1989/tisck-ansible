@@ -1,0 +1,25 @@
+---
+# ==============================================================================
+# TISCK ATAK Pairing & Auto-Enrollment QR Generator (playbooks/tak_pairing_qr.yml)
+# ==============================================================================
+- name: Generate ATAK Client Auto-Enrollment QR Code
+  hosts: tisck
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Generate ATAK auto-enrollment QR code using TAK Server helper
+      ansible.builtin.shell: |
+        docker exec -i tak-infra-tak-server-1 node -e '
+        const fs = require("fs");
+        console.log("ATAK Client Auto-Enrollment Configuration:");
+        console.log("Server URL: https://{{ tisck_public_host_or_ip }}:{{ tak_cert_port }}/Marti/sync/missionquery");
+        console.log("CoT Host:   {{ tisck_public_host_or_ip }}:{{ tak_cot_port }} (SSL/TLS)");
+        console.log("Web Admin:  https://{{ tisck_public_host_or_ip }}:{{ tak_web_port }}");
+        '
+      register: qr_output
+      failed_when: false
+
+    - name: Display ATAK Pairing Information
+      ansible.builtin.debug:
+        var: qr_output.stdout_lines

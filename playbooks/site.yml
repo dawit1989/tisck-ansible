@@ -1,0 +1,75 @@
+---
+# ==============================================================================
+# TISCK Master Deployment Playbook (playbooks/site.yml)
+# Tactical Intelligence and Secure Communication Kit
+# ==============================================================================
+- name: Deploy TISCK Tactical Platform
+  hosts: tisck
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display deployment banner
+      ansible.builtin.debug:
+        msg:
+          - "================================================================="
+          - "  TISCK: Tactical Intelligence and Secure Communication Kit      "
+          - "  Target Node: {{ inventory_hostname }} ({{ ansible_host | default(inventory_hostname) }})"
+          - "  Public Host / IP: {{ tisck_public_host_or_ip }}"
+          - "  Install Directory: {{ tisck_install_dir }}"
+          - "================================================================="
+
+  roles:
+    - role: common
+      tags: [common, prep]
+
+    - role: docker
+      tags: [docker, prep]
+
+    - role: tisck_repo
+      tags: [tisck_repo, prep]
+
+    - role: tisck_network
+      tags: [tisck_network, network]
+
+    - role: garage
+      when: tisck_enable_garage | bool
+      tags: [garage, storage]
+
+    - role: auth
+      when: tisck_enable_auth | bool
+      tags: [auth, identity]
+
+    - role: media
+      when: tisck_enable_media | bool
+      tags: [media, streaming]
+
+    - role: cloudtak
+      when: tisck_enable_cloudtak | bool
+      tags: [cloudtak, core]
+
+    - role: tak_server
+      when: tisck_enable_tak_server | bool
+      tags: [tak_server, tak]
+
+    - role: basemaps
+      when: basemaps_upload_enabled | bool
+      tags: [basemaps, geospatial]
+
+  post_tasks:
+    - name: Deployment Success Summary
+      ansible.builtin.debug:
+        msg:
+          - "================================================================="
+          - "🚀 TISCK Deployment Completed Successfully!"
+          - "-----------------------------------------------------------------"
+          - "Situational Awareness Web Map: http://{{ tisck_public_host_or_ip }}:{{ cloudtak_api_port }}"
+          - "PMTiles Map Tile Server:      http://{{ tisck_public_host_or_ip }}:{{ cloudtak_tiles_port }}"
+          - "Authentik Identity Admin UI:  http://{{ tisck_public_host_or_ip }}:{{ authentik_http_port }}"
+          - "Garage S3 API Endpoint:       http://127.0.0.1:{{ garage_s3_port }}"
+          - "Media RTSP Stream Ingest:     rtsp://{{ tisck_public_host_or_ip }}:{{ media_port_rtsp }}/<stream>"
+          - "Media WebRTC Playback:        http://{{ tisck_public_host_or_ip }}:{{ media_port_webrtc }}/<stream>"
+          - "TAK Server CoT TLS:           tls://{{ tisck_public_host_or_ip }}:{{ tak_cot_port }}"
+          - "TAK Server Web Console:       https://{{ tisck_public_host_or_ip }}:{{ tak_web_port }}"
+          - "TAK Client Enrollment Port:   https://{{ tisck_public_host_or_ip }}:{{ tak_cert_port }}"
+          - "================================================================="

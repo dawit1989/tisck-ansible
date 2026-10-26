@@ -1,0 +1,4 @@
+---
+# defaults for roles/media
+media_container_name: "media-infra-mediamtx-1"
+media_loglevel: "info"
